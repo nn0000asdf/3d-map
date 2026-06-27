@@ -1,67 +1,488 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <title>3D人口マップ</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>世界 3D 人口マップ — 全居住域</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #05070f; font-family: "Segoe UI", "Hiragino Sans", "Meiryo", sans-serif; color: #e8eefc; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
 
-  <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+  #title { position: fixed; top: 16px; left: 20px; z-index: 10; pointer-events: none; text-shadow: 0 2px 12px rgba(0,0,0,.8); }
+  #title h1 { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+  #title p  { font-size: 12px; opacity: .65; margin-top: 2px; max-width: 480px; line-height: 1.5; }
 
-  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
-  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  #panel { position: fixed; top: 16px; right: 16px; z-index: 10; width: 236px;
+    background: rgba(14,20,38,.82); backdrop-filter: blur(10px);
+    border: 1px solid rgba(120,160,255,.18); border-radius: 14px; padding: 14px 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.5); font-size: 13px; }
+  #panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: .55; margin-bottom: 10px; }
+  .row { display: flex; align-items: center; justify-content: space-between; margin: 11px 0; }
+  .row label { opacity: .9; }
+  input[type=range] { width: 110px; accent-color: #4da3ff; }
+  .seg { display: flex; background: rgba(255,255,255,.06); border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; border: none; background: transparent; color: #cdd8f5; padding: 5px 8px; font-size: 12px; cursor: pointer; transition: .15s; }
+  .seg button.active { background: #2f6dff; color: #fff; }
+  .switch { position: relative; width: 40px; height: 22px; cursor: pointer; }
+  .switch input { display: none; }
+  .slider { position: absolute; inset: 0; background: rgba(255,255,255,.15); border-radius: 22px; transition: .2s; }
+  .slider::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .slider { background: #2f6dff; }
+  .switch input:checked + .slider::before { transform: translateX(18px); }
+  #search { width: 100%; margin-top: 4px; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(120,160,255,.2);
+    background: rgba(0,0,0,.25); color: #fff; font-size: 13px; outline: none; }
+  #search::placeholder { color: rgba(232,238,252,.4); }
+  #reset { width: 100%; margin-top: 10px; padding: 7px; border-radius: 8px; border: 1px solid rgba(120,160,255,.25);
+    background: rgba(47,109,255,.18); color: #cfe0ff; cursor: pointer; font-size: 12px; }
+  #reset:hover { background: rgba(47,109,255,.32); }
 
-  <style>
-    body { margin: 0; }
-    #map { width: 100vw; height: 100vh; }
-  </style>
+  #legend { position: fixed; bottom: 16px; left: 20px; z-index: 10; width: 252px;
+    background: rgba(14,20,38,.82); backdrop-filter: blur(10px);
+    border: 1px solid rgba(120,160,255,.18); border-radius: 14px; padding: 13px 16px; font-size: 12px; }
+  #legend h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: .55; margin-bottom: 9px; }
+  #gradient { height: 12px; border-radius: 6px; margin: 6px 0;
+    background: linear-gradient(90deg, #18e0c8, #6ef06a, #f5e000, #ff8c00, #ff2d2d); }
+  .gscale { display: flex; justify-content: space-between; opacity: .7; font-size: 11px; }
+  #legend .hint { margin-top: 9px; opacity: .58; font-size: 11px; line-height: 1.55; }
+
+  #tip { position: fixed; z-index: 20; pointer-events: none; display: none;
+    background: rgba(8,12,24,.92); border: 1px solid rgba(120,160,255,.35);
+    border-radius: 10px; padding: 9px 12px; font-size: 13px; min-width: 150px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.6); transform: translate(-50%, calc(-100% - 14px)); }
+  #tip .city { font-weight: 700; font-size: 14px; }
+  #tip .ctry { opacity: .6; font-size: 11px; margin-bottom: 5px; }
+  #tip .pop  { color: #6fb4ff; font-weight: 700; font-size: 15px; }
+  #tip .popl { opacity: .55; font-size: 11px; }
+
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 50;
+    background: #05070f; font-size: 14px; letter-spacing: 1px; color: #8fa6d8; transition: opacity .6s; }
+  .spin { width: 16px; height: 16px; border: 2px solid rgba(143,166,216,.3); border-top-color: #6fb4ff;
+    border-radius: 50%; margin-right: 10px; animation: r 1s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+
+  #stats { position: fixed; bottom: 16px; right: 20px; z-index: 10; font-size: 11px; opacity: .55; text-align: right; line-height: 1.6; }
+</style>
 </head>
-
 <body>
-  <div id="map"></div>
+<div id="app"></div>
 
-  <script>
-    mapboxgl.accessToken = 'pk.eyJ1IjoibmFveWEwMDAwIiwiYSI6ImNtbmg2ZTNqNDBleTUycXNoMHN0M2JtZTkifQ.BzT3lsdMTuwTXcD0jGZUAw';
+<div id="title">
+  <h1>🌍 世界 3D 人口マップ — 全居住域</h1>
+  <p>ドラッグ=地球を回す / <b>Ctrl+ドラッグ（または右ドラッグ）=傾けて斜め視点</b> / スクロール=拡大縮小。寄ると小さな町や村まで人口バーが現れます（全約15万地点・実測）。</p>
+</div>
 
-    fetch('population_light.geojson')
-      .then(res => res.json())
-      .then(data => {
+<div id="panel">
+  <h2>表示設定</h2>
+  <div class="row">
+    <label>高さスケール</label>
+    <div class="seg" id="scaleSeg">
+      <button data-mode="log" class="active">対数</button>
+      <button data-mode="linear">線形</button>
+    </div>
+  </div>
+  <div class="row">
+    <label>バーの高さ</label>
+    <input type="range" id="heightMul" min="0.4" max="2.5" step="0.05" value="1">
+  </div>
+  <div class="row">
+    <label>表示量 (LOD)</label>
+    <input type="range" id="lod" min="0.5" max="4" step="0.1" value="1">
+  </div>
+  <div class="row">
+    <label>自動回転</label>
+    <span class="switch"><input type="checkbox" id="autoRot"><span class="slider"></span></span>
+  </div>
+  <div class="row">
+    <label>都市ラベル</label>
+    <span class="switch"><input type="checkbox" id="showLabels" checked><span class="slider"></span></span>
+  </div>
+  <input id="search" type="text" placeholder="🔎 都市名を検索 (例: 東京 / Tokyo)">
+  <button id="reset">🌐 全体表示に戻す</button>
+</div>
 
-        const layer = new deck.ColumnLayer({
-          id: 'population',
-          data: data.features,
+<div id="legend">
+  <h2>人口 (色・高さ)</h2>
+  <div id="gradient"></div>
+  <div class="gscale"><span>少ない</span><span>多い</span></div>
+  <div class="hint" id="legendHint">読み込み中…</div>
+</div>
 
-          getPosition: d => d.geometry.coordinates,
-          getElevation: d => d.properties.VALUE * 5,
+<div id="tip">
+  <div class="city"></div>
+  <div class="ctry"></div>
+  <div class="pop"></div>
+  <div class="popl">人口</div>
+</div>
 
-          radius: 2000,
-          extruded: true,
+<div id="stats"></div>
+<div id="loading"><span class="spin"></span>世界の人口データを読み込み中…</div>
 
-          getFillColor: d => {
-            const v = d.properties.VALUE;
-            return v > 10000 ? [255, 0, 0] :
-                   v > 5000  ? [255, 140, 0] :
-                   v > 1000  ? [255, 200, 0] :
-                               [200, 200, 200];
-          }
-        });
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="borders.js?v=2"></script>
+<script src="places.js?v=2"></script>
+<script>
+(function () {
+  "use strict";
+  const loadingEl = document.getElementById("loading");
+  if (typeof THREE === "undefined") { loadingEl.innerHTML = "⚠ Three.js を読み込めませんでした。インターネット接続を確認してください。"; return; }
+  const PLACES = window.PLACES;
+  if (!PLACES || !PLACES.length) { loadingEl.innerHTML = "⚠ places.js を読み込めませんでした。"; return; }
 
-        const map = new mapboxgl.Map({
-          container: 'map',
-          style: 'mapbox://styles/mapbox/light-v10',
-          center: [139.7, 35.6],
-          zoom: 6,
-          pitch: 60,
-          bearing: 30
-        });
+  // 国コード→国名（主要国。未収載はコード表示）
+  const CC = {US:"アメリカ",CN:"中国",JP:"日本",IN:"インド",ID:"インドネシア",BR:"ブラジル",PK:"パキスタン",NG:"ナイジェリア",BD:"バングラデシュ",RU:"ロシア",MX:"メキシコ",PH:"フィリピン",EG:"エジプト",VN:"ベトナム",CD:"コンゴ民主",TR:"トルコ",IR:"イラン",DE:"ドイツ",TH:"タイ",GB:"イギリス",FR:"フランス",IT:"イタリア",ZA:"南アフリカ",TZ:"タンザニア",MM:"ミャンマー",KR:"韓国",KP:"北朝鮮",CO:"コロンビア",ES:"スペイン",UG:"ウガンダ",AR:"アルゼンチン",DZ:"アルジェリア",SD:"スーダン",UA:"ウクライナ",IQ:"イラク",AF:"アフガニスタン",PL:"ポーランド",CA:"カナダ",MA:"モロッコ",SA:"サウジアラビア",UZ:"ウズベキスタン",PE:"ペルー",AO:"アンゴラ",MY:"マレーシア",MZ:"モザンビーク",GH:"ガーナ",YE:"イエメン",NP:"ネパール",VE:"ベネズエラ",MG:"マダガスカル",CM:"カメルーン",CI:"コートジボワール",AU:"オーストラリア",NE:"ニジェール",LK:"スリランカ",BF:"ブルキナファソ",ML:"マリ",RO:"ルーマニア",MW:"マラウイ",CL:"チリ",KZ:"カザフスタン",ZM:"ザンビア",GT:"グアテマラ",EC:"エクアドル",SY:"シリア",NL:"オランダ",SN:"セネガル",KH:"カンボジア",TD:"チャド",SO:"ソマリア",ZW:"ジンバブエ",GN:"ギニア",RW:"ルワンダ",BJ:"ベナン",BI:"ブルンジ",TN:"チュニジア",BO:"ボリビア",BE:"ベルギー",HT:"ハイチ",CU:"キューバ",SS:"南スーダン",DO:"ドミニカ共和国",CZ:"チェコ",GR:"ギリシャ",JO:"ヨルダン",PT:"ポルトガル",AZ:"アゼルバイジャン",SE:"スウェーデン",HN:"ホンジュラス",AE:"アラブ首長国",HU:"ハンガリー",TJ:"タジキスタン",BY:"ベラルーシ",AT:"オーストリア",PG:"パプアニューギニア",RS:"セルビア",IL:"イスラエル",CH:"スイス",TG:"トーゴ",SL:"シエラレオネ",LA:"ラオス",PY:"パラグアイ",LY:"リビア",BG:"ブルガリア",LB:"レバノン",NI:"ニカラグア",KG:"キルギス",SV:"エルサルバドル",TM:"トルクメニスタン",SG:"シンガポール",DK:"デンマーク",FI:"フィンランド",NO:"ノルウェー",SK:"スロバキア",IE:"アイルランド",NZ:"ニュージーランド",CR:"コスタリカ",PS:"パレスチナ",LR:"リベリア",OM:"オマーン",KW:"クウェート",MR:"モーリタニア",PA:"パナマ",HR:"クロアチア",GE:"ジョージア",ER:"エリトリア",MN:"モンゴル",UY:"ウルグアイ",AM:"アルメニア",QA:"カタール",JM:"ジャマイカ",AL:"アルバニア",TW:"台湾",HK:"香港",MO:"マカオ"};
+  const ccName = c => CC[c] || c;
 
-        const overlay = new deck.MapboxOverlay({
-          layers: [layer]
-        });
+  // 主要都市の日本語名（自動抽出で欠落/誤りになる東アジア圏などを正しく上書き）
+  const JMAJOR = {
+    "Shanghai|CN":"上海","Beijing|CN":"北京","Shenzhen|CN":"深圳","Guangzhou|CN":"広州",
+    "Chengdu|CN":"成都","Tianjin|CN":"天津","Wuhan|CN":"武漢","Dongguan|CN":"東莞",
+    "Xi'an|CN":"西安","Nanjing|CN":"南京","Hangzhou|CN":"杭州","Foshan|CN":"仏山",
+    "Chongqing|CN":"重慶","Wuzhong|CN":"呉忠","Qingdao|CN":"青島","Shenyang|CN":"瀋陽",
+    "Suzhou|CN":"蘇州","Pudong|CN":"浦東","Hefei|CN":"合肥","Dalian|CN":"大連",
+    "Changchun|CN":"長春","Xiamen|CN":"アモイ","Bao'an|CN":"宝安","Wuxi|CN":"無錫",
+    "Jinan|CN":"済南","Taiyuan|CN":"太原","Zhengzhou|CN":"鄭州","Shijiazhuang|CN":"石家荘",
+    "Kunming|CN":"昆明","Zhongshan|CN":"中山","Nanning|CN":"南寧","Shantou|CN":"汕頭",
+    "Hong Kong|HK":"香港","New Territories|HK":"新界","Macau|MO":"マカオ",
+    "Taipei|TW":"台北","New Taipei City|TW":"新北","Kaohsiung|TW":"高雄","Taichung|TW":"台中","Tainan|TW":"台南",
+    "Tokyo|JP":"東京","Osaka|JP":"大阪","Nagoya|JP":"名古屋","Yokohama|JP":"横浜",
+    "Kyoto|JP":"京都","Sapporo|JP":"札幌","Fukuoka|JP":"福岡","Kobe|JP":"神戸",
+    "Kawasaki|JP":"川崎","Saitama|JP":"さいたま","Hiroshima|JP":"広島","Sendai|JP":"仙台",
+    "Chiba|JP":"千葉","Kitakyushu|JP":"北九州","Niigata|JP":"新潟",
+    "Seoul|KR":"ソウル","Busan|KR":"釜山","Incheon|KR":"仁川","Daegu|KR":"大邱","Daejeon|KR":"大田","Gwangju|KR":"光州",
+    "Pyongyang|KP":"平壌","Ho Chi Minh City|VN":"ホーチミン"
+  };
+  function dispName(i){ const p=PLACES[i]; return JMAJOR[p[0]+"|"+p[4]] || p[5] || p[0]; }
 
-        map.on('load', () => {
-          map.addControl(overlay); // ←これが正解
-        });
+  // ====================== 基本設定 ======================
+  const R = 100;
+  const MAX_BAR = 32;
+  const BASE_R = 0.16;
+  const MIN_DIST = R * 1.03;
+  const MAX_DIST = R * 4.2;
+  const N = PLACES.length;
 
-      });
-  </script>
+  let maxPop = 0;
+  for (let i=0;i<N;i++){ if (PLACES[i][3] > maxPop) maxPop = PLACES[i][3]; }
+  const LM0 = Math.log(500);              // 色/高さの下限基準
+  const LM1 = Math.log(maxPop);
+  const logMaxPop = Math.log(maxPop);
+
+  // ====================== シーン ======================
+  const app = document.getElementById("app");
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x05070f, 0.0008);
+  const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.05, 4000);
+  camera.position.set(0, 90, 280);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  app.appendChild(renderer.domElement);
+
+  // ====================== カメラ操作（地表注視・傾き対応） ======================
+  // 地表の注視点(lat,lon)を中心に、距離 dist・仰角 elev・方位 az でカメラを配置。
+  // ドラッグ=地球を回す / Ctrl(または右)ドラッグ=傾ける(斜め視点) / ホイール=ズーム
+  const WUP = new THREE.Vector3(0,1,0);
+  const DIST_MIN = 6, DIST_MAX = 300;
+  const view = { lat:20, lon:-40, dist:235, elev:88, az:0 };  // 現在値
+  const vt   = { lat:20, lon:-40, dist:235, elev:88, az:0 };  // 目標値
+  let autoRotate = false;
+  const clampf = (v,a,b)=> v<a?a:(v>b?b:v);
+
+  const _n=new THREE.Vector3(), _e=new THREE.Vector3(), _k=new THREE.Vector3(), _dir=new THREE.Vector3(), _focus=new THREE.Vector3();
+  function updateCamera(damp){
+    const f = damp ? 0.14 : 1;
+    view.lat += (vt.lat-view.lat)*f;
+    view.lon += (vt.lon-view.lon)*f;
+    view.dist += (vt.dist-view.dist)*f;
+    view.elev += (vt.elev-view.elev)*f;
+    view.az  += (vt.az-view.az)*f;
+    _n.copy(toVec(view.lat, view.lon, 1)).normalize();
+    _e.crossVectors(WUP, _n); if (_e.lengthSq()<1e-6) _e.set(1,0,0); _e.normalize();
+    _k.crossVectors(_n, _e).normalize();
+    const el = view.elev*Math.PI/180, az = view.az*Math.PI/180;
+    _dir.copy(_n).multiplyScalar(Math.sin(el))
+        .addScaledVector(_k, Math.cos(el)*Math.cos(az))
+        .addScaledVector(_e, Math.cos(el)*Math.sin(az));
+    _focus.copy(_n).multiplyScalar(R);
+    camera.position.copy(_focus).addScaledVector(_dir, view.dist);
+    camera.up.copy(_k);
+    camera.lookAt(_focus);
+  }
+
+  const dom = renderer.domElement;
+  let dragging=false, dragMode="rotate", lastX=0, lastY=0;
+  dom.addEventListener("contextmenu", e=>e.preventDefault());
+  dom.addEventListener("pointerdown", (e)=>{
+    dragging=true; dragMode=(e.ctrlKey||e.metaKey||e.shiftKey||e.button===2)?"tilt":"rotate";
+    lastX=e.clientX; lastY=e.clientY; try{dom.setPointerCapture(e.pointerId);}catch(_){}
+  });
+  dom.addEventListener("pointermove", (e)=>{
+    if(!dragging){ pendingMove={clientX:e.clientX,clientY:e.clientY}; return; }
+    const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
+    if(dragMode==="tilt"){
+      vt.elev = clampf(vt.elev - dy*0.35, 8, 90);   // 上下=傾き（下げるほど斜め）
+      vt.az   = vt.az + dx*0.35;                     // 左右=回り込み
+    } else {
+      const k = 0.16 * (view.dist/DIST_MAX + 0.08);  // ズームに応じて回転速度を調整
+      vt.lon -= dx*k;
+      vt.lat  = clampf(vt.lat + dy*k, -85, 85);
+    }
+    if (tip) tip.style.display="none";
+  });
+  function endDrag(e){ dragging=false; try{dom.releasePointerCapture(e.pointerId);}catch(_){} }
+  dom.addEventListener("pointerup", endDrag);
+  dom.addEventListener("pointercancel", endDrag);
+  dom.addEventListener("wheel", (e)=>{ e.preventDefault(); vt.dist = clampf(vt.dist*Math.exp(e.deltaY*0.0012), DIST_MIN, DIST_MAX); }, {passive:false});
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(1, 0.6, 1);
+  camera.add(dir); scene.add(camera);
+
+  (function stars(){ const g=new THREE.BufferGeometry(), n=2500, pos=new Float32Array(n*3);
+    for(let i=0;i<n;i++){ const r=1200+Math.random()*1000,t=Math.random()*6.283,p=Math.acos(2*Math.random()-1);
+      pos[i*3]=r*Math.sin(p)*Math.cos(t); pos[i*3+1]=r*Math.sin(p)*Math.sin(t); pos[i*3+2]=r*Math.cos(p);}
+    g.setAttribute("position",new THREE.BufferAttribute(pos,3));
+    scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0xffffff,size:1.4,sizeAttenuation:false,transparent:true,opacity:.8})));})();
+
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(R,96,96),
+    new THREE.MeshPhongMaterial({ color:0x16213e, emissive:0x0a1024, shininess:8, specular:0x223355 }));
+  scene.add(globe);
+  new THREE.TextureLoader().load("https://unpkg.com/three-globe@2.30.0/example/img/earth-dark.jpg",
+    (tex)=>{ tex.anisotropy=4; globe.material.map=tex; globe.material.color.set(0x8a9bc0); globe.material.emissive.set(0x050a18); globe.material.needsUpdate=true; },
+    undefined, ()=>{});
+
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(R*1.022,64,64),
+    new THREE.MeshBasicMaterial({ color:0x3a7bff, transparent:true, opacity:.10, side:THREE.BackSide }));
+  scene.add(glow);
+
+  (function graticule(){ const mat=new THREE.LineBasicMaterial({color:0x335588,transparent:true,opacity:.10}); const grp=new THREE.Group();
+    for(let lat=-60;lat<=60;lat+=30){const p=[];for(let lon=-180;lon<=180;lon+=5)p.push(toVec(lat,lon,R*1.001));grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),mat));}
+    for(let lon=-180;lon<180;lon+=30){const p=[];for(let lat=-90;lat<=90;lat+=5)p.push(toVec(lat,lon,R*1.001));grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),mat));}
+    scene.add(grp);})();
+
+  // 国境・海岸線（Natural Earth 50m）
+  (function borders(){
+    const B = window.BORDERS; if (!B || !B.length) return;
+    const rad = R*1.0016, segs = [];
+    const v0 = new THREE.Vector3(), v1 = new THREE.Vector3();
+    for (let r=0; r<B.length; r++){
+      const ring = B[r];
+      for (let i=0; i+3 < ring.length; i+=2){
+        const a = toVec(ring[i+1], ring[i], rad), b = toVec(ring[i+3], ring[i+2], rad);
+        segs.push(a.x,a.y,a.z, b.x,b.y,b.z);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(segs, 3));
+    const m = new THREE.LineBasicMaterial({ color:0x7fd8ff, transparent:true, opacity:0.34 });
+    scene.add(new THREE.LineSegments(g, m));
+  })();
+
+  // ====================== ユーティリティ ======================
+  function toVec(lat, lon, radius){ const phi=(90-lat)*Math.PI/180, theta=(lon+180)*Math.PI/180;
+    return new THREE.Vector3(-(radius*Math.sin(phi)*Math.cos(theta)), radius*Math.cos(phi), radius*Math.sin(phi)*Math.sin(theta)); }
+  const STOPS=[[0,[24,224,200]],[.30,[110,240,106]],[.55,[245,224,0]],[.78,[255,140,0]],[1,[255,45,45]]];
+  function colorFor(t,out){ t=Math.max(0,Math.min(1,t)); out=out||new THREE.Color();
+    for(let i=1;i<STOPS.length;i++){ if(t<=STOPS[i][0]){ const a=STOPS[i-1],b=STOPS[i],k=(t-a[0])/(b[0]-a[0]);
+      return out.setRGB((a[1][0]+(b[1][0]-a[1][0])*k)/255,(a[1][1]+(b[1][1]-a[1][1])*k)/255,(a[1][2]+(b[1][2]-a[1][2])*k)/255);}}
+    return out.setRGB(1,0,0); }
+  const fmt = n => Math.round(n).toLocaleString("ja-JP");
+
+  // ====================== インスタンス（全15万地点） ======================
+  // 単位シリンダ + インスタンス属性(aHeight/aRadius)。頂点シェーダで
+  // uniform(uHeightScale/uRadiusScale) によりズーム連動で伸縮させる。
+  const geo = new THREE.CylinderGeometry(1,1,1,6,1,false); geo.translate(0,0.5,0);
+  const aHeight = new Float32Array(N);   // バー基準高さ
+  const aRadius = new Float32Array(N);   // バー基準太さ
+  geo.setAttribute("aHeight", new THREE.InstancedBufferAttribute(aHeight, 1));
+  geo.setAttribute("aRadius", new THREE.InstancedBufferAttribute(aRadius, 1));
+
+  const mat = new THREE.MeshPhongMaterial({ shininess:22 });
+  const barUniforms = { uHeightScale:{value:1}, uRadiusScale:{value:1} };
+  mat.onBeforeCompile = (shader)=>{
+    shader.uniforms.uHeightScale = barUniforms.uHeightScale;
+    shader.uniforms.uRadiusScale = barUniforms.uRadiusScale;
+    shader.vertexShader = "attribute float aHeight;\nattribute float aRadius;\nuniform float uHeightScale;\nuniform float uRadiusScale;\n" + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>",
+      "vec3 transformed = vec3( position );\n  transformed.xz *= aRadius * uRadiusScale;\n  transformed.y *= aHeight * uHeightScale;");
+  };
+  const mesh = new THREE.InstancedMesh(geo, mat, N);
+  mesh.frustumCulled = false;
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(N*3), 3);
+  scene.add(mesh);
+
+  const nrm  = new Float32Array(N*3);   // 単位法線
+  const colT = new Float32Array(N);     // 色用正規化値
+  const up = new THREE.Vector3(0,1,0), dummy = new THREE.Object3D(), tmpC = new THREE.Color();
+  let state = { mode:"log", heightMul:1 };
+
+  function baseHeight(pop, t){ const tt = state.mode==="log" ? t : pop/maxPop; return (0.05 + 0.95*Math.pow(tt,0.85)) * MAX_BAR; }
+
+  function buildInstances(){
+    for (let i=0;i<N;i++){
+      const p = PLACES[i], lat=p[1], lon=p[2], pop=p[3];
+      const t = Math.max(0, Math.min(1, (Math.log(Math.max(pop,200))-LM0)/(LM1-LM0)));
+      colT[i] = t;
+      const v = toVec(lat,lon,1).normalize();
+      nrm[i*3]=v.x; nrm[i*3+1]=v.y; nrm[i*3+2]=v.z;
+      aHeight[i] = baseHeight(pop, t);
+      aRadius[i] = BASE_R*(0.30 + 0.70*t);
+      dummy.position.set(v.x*R, v.y*R, v.z*R);
+      dummy.quaternion.setFromUnitVectors(up, v);
+      dummy.scale.set(1,1,1); dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      colorFor(t, tmpC); mesh.setColorAt(i, tmpC);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    geo.attributes.aHeight.needsUpdate = true;
+    geo.attributes.aRadius.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
+  function recomputeHeights(){   // 対数⇔線形 切替時のみ
+    for (let i=0;i<N;i++){ aHeight[i] = baseHeight(PLACES[i][3], colT[i]); }
+    geo.attributes.aHeight.needsUpdate = true;
+  }
+
+  // ====================== ラベル（上位都市） ======================
+  const LABELS = Math.min(70, N);
+  function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+  const LBLFONT = '700 46px "Meiryo","Hiragino Sans","Yu Gothic",sans-serif';
+  function makeLabel(text){ const cv=document.createElement("canvas"),ctx=cv.getContext("2d"),fs=46;
+    ctx.font=LBLFONT; const w=ctx.measureText(text).width;
+    cv.width=w+36;cv.height=fs+24; ctx.font=LBLFONT;
+    ctx.fillStyle="rgba(6,10,22,0.78)"; roundRect(ctx,0,0,cv.width,cv.height,13); ctx.fill();
+    ctx.fillStyle="#eaf2ff"; ctx.textBaseline="middle"; ctx.fillText(text,18,cv.height/2+2);
+    const tex=new THREE.CanvasTexture(cv); tex.minFilter=THREE.LinearFilter;
+    const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+    spr.userData.aspect=cv.width/cv.height; return spr; }
+  const labelGroup = new THREE.Group(); scene.add(labelGroup);
+  const labelSprites = [];
+  for (let i=0;i<LABELS;i++){ const s=makeLabel(dispName(i)); s.visible=false; labelSprites.push(s); labelGroup.add(s); }
+
+  // ====================== ホバー ======================
+  const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+  const tip = document.getElementById("tip");
+  let hoverId = -1, lastRay = 0, pendingMove = null;
+
+  function doRaycast(e){
+    mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+    ray.setFromCamera(mouse, camera);
+    const hit = ray.intersectObject(mesh, false);
+    if (hit.length && hit[0].instanceId != null){
+      const id = hit[0].instanceId;
+      if (id !== hoverId){
+        if (hoverId>=0){ colorFor(colT[hoverId], tmpC); mesh.setColorAt(hoverId, tmpC); }
+        hoverId = id; mesh.setColorAt(id, tmpC.setRGB(1,1,1)); mesh.instanceColor.needsUpdate = true;
+      }
+      const p = PLACES[id];
+      const jn = dispName(id);
+      tip.querySelector(".city").textContent = jn;
+      tip.querySelector(".ctry").textContent = ccName(p[4]) + (jn!==p[0] ? "  ·  "+p[0] : "");
+      tip.querySelector(".pop").textContent = fmt(p[3]) + " 人";
+      tip.style.left=e.clientX+"px"; tip.style.top=e.clientY+"px"; tip.style.display="block";
+      document.body.style.cursor="pointer";
+    } else {
+      if (hoverId>=0){ colorFor(colT[hoverId], tmpC); mesh.setColorAt(hoverId, tmpC); mesh.instanceColor.needsUpdate=true; hoverId=-1; }
+      tip.style.display="none"; document.body.style.cursor="default";
+    }
+  }
+  // ====================== 検索 / リセット ======================
+  // 検索した地点を地表注視・斜め見下ろしへ
+  function flyTo(i){ const p=PLACES[i]; vt.lat=p[1]; vt.lon=p[2]; vt.dist=26; vt.elev=50; vt.az=0; }
+  document.getElementById("search").addEventListener("keydown",(e)=>{
+    if(e.key!=="Enter")return; const raw=e.target.value.trim(); const q=raw.toLowerCase(); if(!q)return;
+    let best=-1;
+    for(let i=0;i<N;i++){
+      const nm=PLACES[i][0].toLowerCase();
+      const jp=dispName(i);                       // 日本語名でも検索可
+      if(nm===q || jp===raw){ best=i; break; }
+      if(best<0 && (nm.indexOf(q)>=0 || jp.indexOf(raw)>=0)) best=i;
+    }
+    if(best>=0) flyTo(best);
+  });
+  document.getElementById("reset").addEventListener("click",()=>{ vt.lat=20; vt.dist=235; vt.elev=88; vt.az=0; });
+
+  // ====================== UI ======================
+  document.querySelectorAll("#scaleSeg button").forEach(btn=>btn.addEventListener("click",()=>{
+    document.querySelectorAll("#scaleSeg button").forEach(b=>b.classList.remove("active")); btn.classList.add("active");
+    state.mode=btn.dataset.mode; recomputeHeights();
+  }));
+  document.getElementById("heightMul").addEventListener("input",(e)=>{ state.heightMul=parseFloat(e.target.value); });
+  let lodMul = 1;
+  document.getElementById("lod").addEventListener("input",(e)=>{ lodMul=parseFloat(e.target.value); });
+  document.getElementById("autoRot").addEventListener("change",(e)=>{ autoRotate=e.target.checked; });
+  let labelsOn=true; document.getElementById("showLabels").addEventListener("change",(e)=>{ labelsOn=e.target.checked; });
+  addEventListener("resize",()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+  // ====================== ループ ======================
+  const statsEl = document.getElementById("stats");
+  const MIN_COUNT = 900;
+  let frame = 0;
+  function smooth(a,b,x){ const t=Math.max(0,Math.min(1,(x-a)/(b-a))); return t*t*(3-2*t); }
+  const camDir = new THREE.Vector3(), tmpV = new THREE.Vector3();
+
+  function animate(){
+    requestAnimationFrame(animate);
+    frameStep();
+  }
+  function frameStep(){
+    if (autoRotate) vt.lon += 0.06;
+    updateCamera(true);
+
+    // throttle したレイキャスト
+    const now = performance.now();
+    if (pendingMove && !dragging && now-lastRay > 40){ lastRay=now; const m=pendingMove; pendingMove=null; doRaycast(m); }
+
+    const dNorm = clampf((view.dist-DIST_MIN)/(DIST_MAX-DIST_MIN), 0, 1);
+
+    // LOD: 引くと上位都市のみ、寄ると全地点（人口降順なので count を変えるだけ）
+    const reveal = Math.pow(Math.max(0,1-dNorm), 1.7);
+    const cnt = Math.max(MIN_COUNT, Math.min(N, Math.round(MIN_COUNT * Math.pow(N/MIN_COUNT, reveal) * lodMul)));
+    mesh.count = cnt;
+
+    // ズーム連動: 寄るほどバーを細く・低くしてグラフを細かく見せる
+    const hZoom = 0.16 + 0.84*Math.pow(dNorm, 0.7);   // 近いほど低い
+    const rZoom = 0.13 + 0.87*Math.pow(dNorm, 0.6);   // 近いほど細い（より細く）
+    const curHScale = state.heightMul * hZoom;
+    barUniforms.uHeightScale.value = curHScale;
+    barUniforms.uRadiusScale.value = rZoom;
+
+    glow.material.opacity = 0.07 + (1-dNorm)*0.06;
+
+    // ラベル
+    camDir.copy(camera.position).normalize();
+    const labelMax = labelsOn ? Math.round(6 + (1-dNorm)*(LABELS-6)) : 0;
+    for (let i=0;i<LABELS;i++){
+      const spr=labelSprites[i];
+      tmpV.set(nrm[i*3],nrm[i*3+1],nrm[i*3+2]);
+      const facing = tmpV.dot(camDir);
+      if (i<labelMax && facing>0.28 && i<cnt){
+        spr.visible=true;
+        const top=R + aHeight[i]*curHScale + 5;
+        spr.position.set(tmpV.x*top, tmpV.y*top, tmpV.z*top);
+        const s=view.dist*0.02; spr.scale.set(spr.userData.aspect*s, s, 1);
+      } else spr.visible=false;
+    }
+
+    if((frame++ & 15)===0){
+      statsEl.textContent = "表示地点: " + cnt.toLocaleString() + " / " + N.toLocaleString() + "  ·  ズーム: " + Math.round((1-dNorm)*100) + "%";
+    }
+    renderer.render(scene,camera);
+  }
+
+  // ====================== 初期化 ======================
+  document.getElementById("legendHint").textContent =
+    "全 " + N.toLocaleString() + " 地点（実測・GeoNames）。バーの高さ＝人口。ズームで表示数が自動調整されます。";
+  buildInstances();
+  updateCamera(false);
+  animate();
+  // タブが非表示でも描画を継続（rAF停止対策）
+  setInterval(()=>{ if (document.hidden) frameStep(); }, 200);
+  setTimeout(()=>{ loadingEl.style.opacity=0; setTimeout(()=>loadingEl.style.display="none",600); }, 400);
+})();
+</script>
 </body>
 </html>
