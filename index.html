@@ -69,8 +69,8 @@
 <div id="app"></div>
 
 <div id="title">
-  <h1>🌍 世界 3D 人口マップ — 全居住域</h1>
-  <p>ドラッグ=地球を回す / <b>Ctrl+ドラッグ（または右ドラッグ）=傾けて斜め視点</b> / スクロール=拡大縮小。寄ると小さな町や村まで人口バーが現れます（全約15万地点・実測）。</p>
+  <h1>🌍 世界 3D 人口マップ — 実測グリッド</h1>
+  <p>ドラッグ=移動(パン) / <b>Ctrl+ドラッグ（または右ドラッグ）=左右で回転・上下で傾き</b> / スクロール=拡大縮小。バー＝<b>実測の人口グリッド（GPWv4・農村部含む）</b>。色・高さ＝そのエリアの実人口。</p>
 </div>
 
 <div id="panel">
@@ -78,17 +78,17 @@
   <div class="row">
     <label>高さスケール</label>
     <div class="seg" id="scaleSeg">
-      <button data-mode="log" class="active">対数</button>
-      <button data-mode="linear">線形</button>
+      <button data-mode="log">対数</button>
+      <button data-mode="linear" class="active">線形</button>
     </div>
   </div>
   <div class="row">
     <label>バーの高さ</label>
-    <input type="range" id="heightMul" min="0.4" max="2.5" step="0.05" value="1">
+    <input type="range" id="heightMul" min="0.4" max="2.5" step="0.05" value="0.4">
   </div>
   <div class="row">
     <label>表示量 (LOD)</label>
-    <input type="range" id="lod" min="0.5" max="4" step="0.1" value="1">
+    <input type="range" id="lod" min="0.5" max="4" step="0.1" value="4">
   </div>
   <div class="row">
     <label>自動回転</label>
@@ -123,13 +123,16 @@
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="borders.js?v=2"></script>
 <script src="places.js?v=2"></script>
+<script src="pop.js?v=2"></script>
 <script>
 (function () {
   "use strict";
   const loadingEl = document.getElementById("loading");
   if (typeof THREE === "undefined") { loadingEl.innerHTML = "⚠ Three.js を読み込めませんでした。インターネット接続を確認してください。"; return; }
-  const PLACES = window.PLACES;
+  const PLACES = window.PLACES;   // 都市ラベル・検索用
   if (!PLACES || !PLACES.length) { loadingEl.innerHTML = "⚠ places.js を読み込めませんでした。"; return; }
+  const POP = window.POP;         // バー＝実測人口グリッド(GPWv4)
+  if (!POP || !POP.length) { loadingEl.innerHTML = "⚠ pop.js を読み込めませんでした。"; return; }
 
   // 国コード→国名（主要国。未収載はコード表示）
   const CC = {US:"アメリカ",CN:"中国",JP:"日本",IN:"インド",ID:"インドネシア",BR:"ブラジル",PK:"パキスタン",NG:"ナイジェリア",BD:"バングラデシュ",RU:"ロシア",MX:"メキシコ",PH:"フィリピン",EG:"エジプト",VN:"ベトナム",CD:"コンゴ民主",TR:"トルコ",IR:"イラン",DE:"ドイツ",TH:"タイ",GB:"イギリス",FR:"フランス",IT:"イタリア",ZA:"南アフリカ",TZ:"タンザニア",MM:"ミャンマー",KR:"韓国",KP:"北朝鮮",CO:"コロンビア",ES:"スペイン",UG:"ウガンダ",AR:"アルゼンチン",DZ:"アルジェリア",SD:"スーダン",UA:"ウクライナ",IQ:"イラク",AF:"アフガニスタン",PL:"ポーランド",CA:"カナダ",MA:"モロッコ",SA:"サウジアラビア",UZ:"ウズベキスタン",PE:"ペルー",AO:"アンゴラ",MY:"マレーシア",MZ:"モザンビーク",GH:"ガーナ",YE:"イエメン",NP:"ネパール",VE:"ベネズエラ",MG:"マダガスカル",CM:"カメルーン",CI:"コートジボワール",AU:"オーストラリア",NE:"ニジェール",LK:"スリランカ",BF:"ブルキナファソ",ML:"マリ",RO:"ルーマニア",MW:"マラウイ",CL:"チリ",KZ:"カザフスタン",ZM:"ザンビア",GT:"グアテマラ",EC:"エクアドル",SY:"シリア",NL:"オランダ",SN:"セネガル",KH:"カンボジア",TD:"チャド",SO:"ソマリア",ZW:"ジンバブエ",GN:"ギニア",RW:"ルワンダ",BJ:"ベナン",BI:"ブルンジ",TN:"チュニジア",BO:"ボリビア",BE:"ベルギー",HT:"ハイチ",CU:"キューバ",SS:"南スーダン",DO:"ドミニカ共和国",CZ:"チェコ",GR:"ギリシャ",JO:"ヨルダン",PT:"ポルトガル",AZ:"アゼルバイジャン",SE:"スウェーデン",HN:"ホンジュラス",AE:"アラブ首長国",HU:"ハンガリー",TJ:"タジキスタン",BY:"ベラルーシ",AT:"オーストリア",PG:"パプアニューギニア",RS:"セルビア",IL:"イスラエル",CH:"スイス",TG:"トーゴ",SL:"シエラレオネ",LA:"ラオス",PY:"パラグアイ",LY:"リビア",BG:"ブルガリア",LB:"レバノン",NI:"ニカラグア",KG:"キルギス",SV:"エルサルバドル",TM:"トルクメニスタン",SG:"シンガポール",DK:"デンマーク",FI:"フィンランド",NO:"ノルウェー",SK:"スロバキア",IE:"アイルランド",NZ:"ニュージーランド",CR:"コスタリカ",PS:"パレスチナ",LR:"リベリア",OM:"オマーン",KW:"クウェート",MR:"モーリタニア",PA:"パナマ",HR:"クロアチア",GE:"ジョージア",ER:"エリトリア",MN:"モンゴル",UY:"ウルグアイ",AM:"アルメニア",QA:"カタール",JM:"ジャマイカ",AL:"アルバニア",TW:"台湾",HK:"香港",MO:"マカオ"};
@@ -159,14 +162,14 @@
   // ====================== 基本設定 ======================
   const R = 100;
   const MAX_BAR = 32;
-  const BASE_R = 0.16;
+  const BASE_R = 0.10;        // 0.1°グリッドのセルを充填する太さ（細め）
   const MIN_DIST = R * 1.03;
   const MAX_DIST = R * 4.2;
-  const N = PLACES.length;
+  const N = POP.length;                    // グリッドセル数
 
   let maxPop = 0;
-  for (let i=0;i<N;i++){ if (PLACES[i][3] > maxPop) maxPop = PLACES[i][3]; }
-  const LM0 = Math.log(500);              // 色/高さの下限基準
+  for (let i=0;i<N;i++){ if (POP[i][2] > maxPop) maxPop = POP[i][2]; }
+  const LM0 = Math.log(300);              // セル人口の下限基準
   const LM1 = Math.log(maxPop);
   const logMaxPop = Math.log(maxPop);
 
@@ -184,51 +187,75 @@
   // ====================== カメラ操作（地表注視・傾き対応） ======================
   // 地表の注視点(lat,lon)を中心に、距離 dist・仰角 elev・方位 az でカメラを配置。
   // ドラッグ=地球を回す / Ctrl(または右)ドラッグ=傾ける(斜め視点) / ホイール=ズーム
+  // Google Earth 風: 注視点(lat,lon)を中心に dist(高度)・pitch(傾き)・head(方位)。
+  // ドラッグ=視点基準でパン / Ctrl(右)ドラッグ=左右で方位回転・上下で傾き / ホイール=ズーム
   const WUP = new THREE.Vector3(0,1,0);
-  const DIST_MIN = 6, DIST_MAX = 300;
-  const view = { lat:20, lon:-40, dist:235, elev:88, az:0 };  // 現在値
-  const vt   = { lat:20, lon:-40, dist:235, elev:88, az:0 };  // 目標値
+  const DIST_MIN = 6, DIST_MAX = 240;
+  const DEG = Math.PI/180;
+  const view = { lat:20, lon:-40, dist:150, pitch:32, head:0 };  // 現在値
+  const vt   = { lat:20, lon:-40, dist:150, pitch:32, head:0 };  // 目標値
   let autoRotate = false;
   const clampf = (v,a,b)=> v<a?a:(v>b?b:v);
 
-  const _n=new THREE.Vector3(), _e=new THREE.Vector3(), _k=new THREE.Vector3(), _dir=new THREE.Vector3(), _focus=new THREE.Vector3();
+  const _n=new THREE.Vector3(), _e=new THREE.Vector3(), _k=new THREE.Vector3(),
+        _fwd=new THREE.Vector3(), _dir=new THREE.Vector3(), _focus=new THREE.Vector3();
+  // 地表にカメラがめり込まない範囲での最大ピッチ（高度が高いほど大きく傾けられる）
+  // マージンを小さくし、最大ズームでも地平線近くまで寝かせられるように
+  function maxPitchAllowed(){
+    const minMag = R + 0.6, d = Math.max(1, view.dist);
+    const cosMin = (minMag*minMag - R*R - d*d) / (2*R*d);
+    if (cosMin <= -1) return 168;
+    if (cosMin >=  1) return 5;
+    return Math.acos(cosMin)/DEG;
+  }
   function updateCamera(damp){
     const f = damp ? 0.14 : 1;
-    view.lat += (vt.lat-view.lat)*f;
-    view.lon += (vt.lon-view.lon)*f;
+    view.lat  += (vt.lat -view.lat )*f;
+    view.lon  += (vt.lon -view.lon )*f;
     view.dist += (vt.dist-view.dist)*f;
-    view.elev += (vt.elev-view.elev)*f;
-    view.az  += (vt.az-view.az)*f;
+    view.pitch+= (vt.pitch-view.pitch)*f;
+    view.head += (vt.head-view.head)*f;
+    const _mp = maxPitchAllowed();               // 上下どちらにも傾け可（安全範囲で）
+    if (view.pitch > _mp) view.pitch = _mp;
+    if (view.pitch < 0) view.pitch = 0;
     _n.copy(toVec(view.lat, view.lon, 1)).normalize();
     _e.crossVectors(WUP, _n); if (_e.lengthSq()<1e-6) _e.set(1,0,0); _e.normalize();
     _k.crossVectors(_n, _e).normalize();
-    const el = view.elev*Math.PI/180, az = view.az*Math.PI/180;
-    _dir.copy(_n).multiplyScalar(Math.sin(el))
-        .addScaledVector(_k, Math.cos(el)*Math.cos(az))
-        .addScaledVector(_e, Math.cos(el)*Math.sin(az));
+    const h=view.head*DEG, p=view.pitch*DEG;
+    const ch=Math.cos(h), sh=Math.sin(h), cp=Math.cos(p), sp=Math.sin(p);
+    _fwd.copy(_k).multiplyScalar(ch).addScaledVector(_e, sh);     // 地表の前方(方位)
+    _dir.copy(_n).multiplyScalar(cp).addScaledVector(_fwd, -sp);  // 注視点→カメラ
     _focus.copy(_n).multiplyScalar(R);
     camera.position.copy(_focus).addScaledVector(_dir, view.dist);
-    camera.up.copy(_k);
+    camera.up.copy(_n).multiplyScalar(sp).addScaledVector(_fwd, cp); // 視線に直交=ロール無し
     camera.lookAt(_focus);
+  }
+  // 画面ドラッグ量を、現在の方位(head)に沿って注視点移動へ変換（視点基準パン）
+  function panBy(dx, dy){
+    const speed = 0.0004*view.dist + 0.035;
+    const fAmt = dy*speed, rAmt = -dx*speed;          // つかんで動かす感覚
+    const h=view.head*DEG, ch=Math.cos(h), sh=Math.sin(h);
+    const dE = fAmt*sh + rAmt*ch;
+    const dN = fAmt*ch - rAmt*sh;
+    vt.lat = clampf(vt.lat + dN, -85, 85);
+    vt.lon += dE / Math.max(0.25, Math.cos(vt.lat*DEG));
   }
 
   const dom = renderer.domElement;
-  let dragging=false, dragMode="rotate", lastX=0, lastY=0;
+  let dragging=false, dragMode="pan", lastX=0, lastY=0;
   dom.addEventListener("contextmenu", e=>e.preventDefault());
   dom.addEventListener("pointerdown", (e)=>{
-    dragging=true; dragMode=(e.ctrlKey||e.metaKey||e.shiftKey||e.button===2)?"tilt":"rotate";
+    dragging=true; dragMode=(e.ctrlKey||e.metaKey||e.shiftKey||e.button===2)?"orbit":"pan";
     lastX=e.clientX; lastY=e.clientY; try{dom.setPointerCapture(e.pointerId);}catch(_){}
   });
   dom.addEventListener("pointermove", (e)=>{
     if(!dragging){ pendingMove={clientX:e.clientX,clientY:e.clientY}; return; }
     const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
-    if(dragMode==="tilt"){
-      vt.elev = clampf(vt.elev - dy*0.35, 8, 90);   // 上下=傾き（下げるほど斜め）
-      vt.az   = vt.az + dx*0.35;                     // 左右=回り込み
+    if(dragMode==="orbit"){
+      vt.head  = vt.head + dx*0.30;                       // 左右=方位（回り込み）
+      vt.pitch = clampf(vt.pitch - dy*0.30, 0, maxPitchAllowed()); // 上下=傾き（操作反転）
     } else {
-      const k = 0.16 * (view.dist/DIST_MAX + 0.08);  // ズームに応じて回転速度を調整
-      vt.lon -= dx*k;
-      vt.lat  = clampf(vt.lat + dy*k, -85, 85);
+      panBy(dx, dy);                                      // 視点基準パン
     }
     if (tip) tip.style.display="none";
   });
@@ -317,19 +344,19 @@
   const nrm  = new Float32Array(N*3);   // 単位法線
   const colT = new Float32Array(N);     // 色用正規化値
   const up = new THREE.Vector3(0,1,0), dummy = new THREE.Object3D(), tmpC = new THREE.Color();
-  let state = { mode:"log", heightMul:1 };
+  let state = { mode:"linear", heightMul:0.4 };
 
   function baseHeight(pop, t){ const tt = state.mode==="log" ? t : pop/maxPop; return (0.05 + 0.95*Math.pow(tt,0.85)) * MAX_BAR; }
 
   function buildInstances(){
     for (let i=0;i<N;i++){
-      const p = PLACES[i], lat=p[1], lon=p[2], pop=p[3];
-      const t = Math.max(0, Math.min(1, (Math.log(Math.max(pop,200))-LM0)/(LM1-LM0)));
+      const p = POP[i], lat=p[0], lon=p[1], pop=p[2];
+      const t = Math.max(0, Math.min(1, (Math.log(Math.max(pop,100))-LM0)/(LM1-LM0)));
       colT[i] = t;
       const v = toVec(lat,lon,1).normalize();
       nrm[i*3]=v.x; nrm[i*3+1]=v.y; nrm[i*3+2]=v.z;
       aHeight[i] = baseHeight(pop, t);
-      aRadius[i] = BASE_R*(0.30 + 0.70*t);
+      aRadius[i] = BASE_R*(0.85 + 0.15*t);   // ほぼ均一・セル充填
       dummy.position.set(v.x*R, v.y*R, v.z*R);
       dummy.quaternion.setFromUnitVectors(up, v);
       dummy.scale.set(1,1,1); dummy.updateMatrix();
@@ -342,12 +369,13 @@
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
   function recomputeHeights(){   // 対数⇔線形 切替時のみ
-    for (let i=0;i<N;i++){ aHeight[i] = baseHeight(PLACES[i][3], colT[i]); }
+    for (let i=0;i<N;i++){ aHeight[i] = baseHeight(POP[i][2], colT[i]); }
     geo.attributes.aHeight.needsUpdate = true;
   }
 
   // ====================== ラベル（上位都市） ======================
-  const LABELS = Math.min(70, N);
+  const LABELS = Math.min(70, PLACES.length);
+  const lblNrm = new Float32Array(LABELS*3);
   function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
   const LBLFONT = '700 46px "Meiryo","Hiragino Sans","Yu Gothic",sans-serif';
   function makeLabel(text){ const cv=document.createElement("canvas"),ctx=cv.getContext("2d"),fs=46;
@@ -360,7 +388,8 @@
     spr.userData.aspect=cv.width/cv.height; return spr; }
   const labelGroup = new THREE.Group(); scene.add(labelGroup);
   const labelSprites = [];
-  for (let i=0;i<LABELS;i++){ const s=makeLabel(dispName(i)); s.visible=false; labelSprites.push(s); labelGroup.add(s); }
+  for (let i=0;i<LABELS;i++){ const s=makeLabel(dispName(i)); s.visible=false; labelSprites.push(s); labelGroup.add(s);
+    const v=toVec(PLACES[i][1],PLACES[i][2],1).normalize(); lblNrm[i*3]=v.x; lblNrm[i*3+1]=v.y; lblNrm[i*3+2]=v.z; }
 
   // ====================== ホバー ======================
   const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
@@ -377,11 +406,11 @@
         if (hoverId>=0){ colorFor(colT[hoverId], tmpC); mesh.setColorAt(hoverId, tmpC); }
         hoverId = id; mesh.setColorAt(id, tmpC.setRGB(1,1,1)); mesh.instanceColor.needsUpdate = true;
       }
-      const p = PLACES[id];
-      const jn = dispName(id);
-      tip.querySelector(".city").textContent = jn;
-      tip.querySelector(".ctry").textContent = ccName(p[4]) + (jn!==p[0] ? "  ·  "+p[0] : "");
-      tip.querySelector(".pop").textContent = fmt(p[3]) + " 人";
+      const p = POP[id];
+      tip.querySelector(".city").textContent = ccName(p[3]) + " 付近";
+      tip.querySelector(".ctry").textContent = "約11km四方 セル";
+      tip.querySelector(".pop").textContent = "≈ " + fmt(p[2]) + " 人";
+      tip.querySelector(".popl").textContent = "GPWv4 実測人口 (2015)";
       tip.style.left=e.clientX+"px"; tip.style.top=e.clientY+"px"; tip.style.display="block";
       document.body.style.cursor="pointer";
     } else {
@@ -391,11 +420,11 @@
   }
   // ====================== 検索 / リセット ======================
   // 検索した地点を地表注視・斜め見下ろしへ
-  function flyTo(i){ const p=PLACES[i]; vt.lat=p[1]; vt.lon=p[2]; vt.dist=26; vt.elev=50; vt.az=0; }
+  function flyTo(i){ const p=PLACES[i]; vt.lat=p[1]; vt.lon=p[2]; vt.dist=22; vt.pitch=58; vt.head=0; }
   document.getElementById("search").addEventListener("keydown",(e)=>{
     if(e.key!=="Enter")return; const raw=e.target.value.trim(); const q=raw.toLowerCase(); if(!q)return;
     let best=-1;
-    for(let i=0;i<N;i++){
+    for(let i=0;i<PLACES.length;i++){
       const nm=PLACES[i][0].toLowerCase();
       const jp=dispName(i);                       // 日本語名でも検索可
       if(nm===q || jp===raw){ best=i; break; }
@@ -403,7 +432,7 @@
     }
     if(best>=0) flyTo(best);
   });
-  document.getElementById("reset").addEventListener("click",()=>{ vt.lat=20; vt.dist=235; vt.elev=88; vt.az=0; });
+  document.getElementById("reset").addEventListener("click",()=>{ vt.lat=20; vt.dist=150; vt.pitch=32; vt.head=0; });
 
   // ====================== UI ======================
   document.querySelectorAll("#scaleSeg button").forEach(btn=>btn.addEventListener("click",()=>{
@@ -411,7 +440,7 @@
     state.mode=btn.dataset.mode; recomputeHeights();
   }));
   document.getElementById("heightMul").addEventListener("input",(e)=>{ state.heightMul=parseFloat(e.target.value); });
-  let lodMul = 1;
+  let lodMul = 4;
   document.getElementById("lod").addEventListener("input",(e)=>{ lodMul=parseFloat(e.target.value); });
   document.getElementById("autoRot").addEventListener("change",(e)=>{ autoRotate=e.target.checked; });
   let labelsOn=true; document.getElementById("showLabels").addEventListener("change",(e)=>{ labelsOn=e.target.checked; });
@@ -439,13 +468,13 @@
     const dNorm = clampf((view.dist-DIST_MIN)/(DIST_MAX-DIST_MIN), 0, 1);
 
     // LOD: 引くと上位都市のみ、寄ると全地点（人口降順なので count を変えるだけ）
-    const reveal = Math.pow(Math.max(0,1-dNorm), 1.7);
-    const cnt = Math.max(MIN_COUNT, Math.min(N, Math.round(MIN_COUNT * Math.pow(N/MIN_COUNT, reveal) * lodMul)));
+    // グリッドは解像度一定。表示量(LOD)スライダーで「人口上位 何% のセルを出すか」を制御
+    const cnt = Math.max(MIN_COUNT, Math.min(N, Math.round(N * lodMul / 4)));
     mesh.count = cnt;
 
-    // ズーム連動: 寄るほどバーを細く・低くしてグラフを細かく見せる
+    // ズーム連動: 寄るほどバーを低く。太さはセル充填のためほぼ維持
     const hZoom = 0.16 + 0.84*Math.pow(dNorm, 0.7);   // 近いほど低い
-    const rZoom = 0.13 + 0.87*Math.pow(dNorm, 0.6);   // 近いほど細い（より細く）
+    const rZoom = 0.85 + 0.15*dNorm;                  // ほぼ充填（細らせない）
     const curHScale = state.heightMul * hZoom;
     barUniforms.uHeightScale.value = curHScale;
     barUniforms.uRadiusScale.value = rZoom;
@@ -455,27 +484,27 @@
     // ラベル
     camDir.copy(camera.position).normalize();
     const labelMax = labelsOn ? Math.round(6 + (1-dNorm)*(LABELS-6)) : 0;
+    const lblTop = R + MAX_BAR*curHScale + 4;        // バーの上に浮かせる
     for (let i=0;i<LABELS;i++){
       const spr=labelSprites[i];
-      tmpV.set(nrm[i*3],nrm[i*3+1],nrm[i*3+2]);
+      tmpV.set(lblNrm[i*3],lblNrm[i*3+1],lblNrm[i*3+2]);
       const facing = tmpV.dot(camDir);
-      if (i<labelMax && facing>0.28 && i<cnt){
+      if (i<labelMax && facing>0.28){
         spr.visible=true;
-        const top=R + aHeight[i]*curHScale + 5;
-        spr.position.set(tmpV.x*top, tmpV.y*top, tmpV.z*top);
+        spr.position.set(tmpV.x*lblTop, tmpV.y*lblTop, tmpV.z*lblTop);
         const s=view.dist*0.02; spr.scale.set(spr.userData.aspect*s, s, 1);
       } else spr.visible=false;
     }
 
     if((frame++ & 15)===0){
-      statsEl.textContent = "表示地点: " + cnt.toLocaleString() + " / " + N.toLocaleString() + "  ·  ズーム: " + Math.round((1-dNorm)*100) + "%";
+      statsEl.textContent = "表示セル: " + cnt.toLocaleString() + " / " + N.toLocaleString() + "  ·  ズーム: " + Math.round((1-dNorm)*100) + "%";
     }
     renderer.render(scene,camera);
   }
 
   // ====================== 初期化 ======================
   document.getElementById("legendHint").textContent =
-    "全 " + N.toLocaleString() + " 地点（実測・GeoNames）。バーの高さ＝人口。ズームで表示数が自動調整されます。";
+    "実測人口グリッド GPWv4(2015) ≈11km四方 × " + N.toLocaleString() + "セル（農村部含む実人口）。色・高さ＝そのセルの人口。";
   buildInstances();
   updateCamera(false);
   animate();
